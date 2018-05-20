@@ -25,4 +25,4 @@ while True:
     mbx,mby = tuple(zip(*(mbbox_points + (mbbox_points[0],))))
     mbbox.set_xdata(mbx)
     mbbox.set_ydata(mby)
-    plt.pause(0.005)
+    plt.pause(0.001)

@@ -1,0 +1,26 @@
+import gpiozero.output_devices as od
+
+left_motor = od.Motor(14,15,pwm=True)
+right_motor = od.Motor(20,21,pwm=True)
+
+right_motor.forward(1)
+input()
+right_motor.forward(0.5)
+input()
+right_motor.backward(1)
+input()
+right_motor.backward(0.5)
+input()
+right_motor.stop()
+input()
+
+left_motor.forward(1)
+input()
+left_motor.forward(0.5)
+input()
+left_motor.backward(1)
+input()
+left_motor.backward(0.5)
+input()
+left_motor.stop()
+input()

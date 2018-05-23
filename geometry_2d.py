@@ -142,7 +142,7 @@ def get_bbox_size(points, mbbox=False):
         return b, a
 
 
-def get_area(points):
+def get_area(points, signed=False):
     """
     Calculates the area of an arbitary closed shape using the shoelace formula\n
     Format for points: ((x1,y1),(x2,y2),(x3,y3))\n
@@ -152,7 +152,10 @@ def get_area(points):
     x, y = zip(*points)
     for i in range(len(points)-1):
         sum += x[i]*y[i+1] - y[i] * x[i+1]
-    return 0.5*abs(sum)
+    if signed:
+        return 0.5*sum
+    else:
+        return 0.5*abs(sum)
 
 
 # -----------------------Other calculations-----------------------
@@ -193,16 +196,36 @@ def get_sbbox(points):
     return (xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin)
 
 
-def get_centeroid(points):
+def get_line_center(point1, point2):
+    """ Returns the center point between two points """
+    x1, y1 = point1
+    x2, y2 = point2
+    rx = (x1 + x2) / 2
+    ry = (y1 + y2) / 2
+    return rx, ry
+
+
+def get_centeroid(points, shape=True):
     """
-    Returns the centeroid of a cluster of points\n
+    Returns the centeroid of a cluster of points or a shape\n
     Format for points: ((x1,y1),(x2,y2),(x3,y3))\n
     """
-    points = _first_last_point(points, add=False)
-    points = tuple(zip(*points))
-    x = sum(points[0])/len(points[0])
-    y = sum(points[1]) / len(points[1])
-    return x, y
+    if shape:
+        area = get_area(points, signed = True)
+        points = _first_last_point(points, add=True)
+        xsum = 0
+        ysum = 0
+        for i in range(len(points) - 1):
+            (x1, y1), (x2, y2) = points[i:i+2]
+            xsum += (x1 + x2) * (x1 * y2 - x2 * y1)
+            ysum += (y1 + y2) * (x1 * y2 - x2 * y1)
+        return xsum/(6*area), ysum/(6*area)
+    else:
+        points = _first_last_point(points, add=False)
+        points = tuple(zip(*points))
+        x = sum(points[0])/len(points[0])
+        y = sum(points[1]) / len(points[1])
+        return x, y
 
 
 def get_visual_center():
@@ -257,18 +280,21 @@ def is_inside(inner_points, outer_points):
     pass
 
 
-def is_overlap(points1, points2, tolerance=0):
+def is_overlapping(points1, points2, tolerance=0):
     pass
 
 
-def get_similarity(points1, points2, tolerance=0):
+def get_similarity(points1, points2, tolerance=0, rotation=False, scale=False):
     """
     return the similarity percentage between the two group of points
     """
     pass
 
 
-# -----------------------Utility functions-----------------------
+def get_shortest_path(moving_shape, pivot_line, obstacles, destination, pivot_point=None, tolerance=0, refpoint=None):
+    pass
+
+# -----------------------Private utility functions-----------------------
 
 
 def _first_last_point(points, add=True):

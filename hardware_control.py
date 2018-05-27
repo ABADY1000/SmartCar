@@ -3,6 +3,7 @@ import gpiozero.input_devices as id
 import threading
 from geometry_2d import *
 import time
+import smbus
 
 # Constants
 angle_threshold = 5
@@ -204,10 +205,68 @@ def speed_control():
 
 
 def current_angle_updater():
+    global current_angle
     event_current_angle = current_angle
+    Register_A = 0  # Address of Configuration register A
+    Register_B = 0x01  # Address of configuration register B
+    Register_mode = 0x02  # Address of mode register
+
+    X_axis_H = 0x03  # Address of X-axis MSB data register
+    Z_axis_H = 0x05  # Address of Z-axis MSB data register
+    Y_axis_H = 0x07  # Address of Y-axis MSB data register
+    declination = -0.00669  # define declination angle of location where measurement going to be done
+
+    def Magnetometer_Init():
+        # write to Configuration Register A
+        bus.write_byte_data(Device_Address, Register_A, 0x70)
+
+        # Write to Configuration Register B for gain
+        bus.write_byte_data(Device_Address, Register_B, 0xa0)
+
+        # Write to mode Register for selecting mode
+        bus.write_byte_data(Device_Address, Register_mode, 0)
+
+    def read_raw_data(addr):
+
+        # Read raw 16-bit value
+        high = bus.read_byte_data(Device_Address, addr)
+        low = bus.read_byte_data(Device_Address, addr + 1)
+
+        # concatenate higher and lower value
+        value = ((high << 8) | low)
+
+        # to get signed value from module
+        if value > 32768:
+            value = value - 65536
+        return value
+
+    bus = smbus.SMBus(1)  # or bus = smbus.SMBus(0) for older version boards
+    Device_Address = 0x1e  # HMC5883L magnetometer device address
+    Magnetometer_Init()  # initialize HMC5883L magnetometer
     while running:
         time.sleep(0.1)
-        current_angle_change_event.set()
+        # Read Accelerometer raw value
+        x = read_raw_data(X_axis_H)
+        z = read_raw_data(Z_axis_H)
+        y = read_raw_data(Y_axis_H)
+
+        heading = numpy.atan2(y, x) + declination
+
+        # Due to declination check for >360 degree
+        if (heading > 2 * numpy.pi):
+            heading = heading - 2 * numpy.pi
+
+        # check for sign
+        if (heading < 0):
+            heading = heading + 2 * numpy.pi
+
+        # convert into angle
+        heading_angle = int(heading * 180 / numpy.pi)
+        current_angle = heading_angle
+        if abs(current_angle - event_current_angle) > angle_threshold:
+            event_current_angle = current_angle
+            current_angle_change_event.set()
+
     lprint('current_angle_updater thread is exiting')
 
 

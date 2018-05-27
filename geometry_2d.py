@@ -78,7 +78,7 @@ def rotate(points, angle, absolute=False, refpoint=None, refline=None):
 # -----------------------Essential calculations-----------------------
 
 
-def get_angle(p, o):
+def get_angle(p, o=(0, 0), principal=True):
     """
     Calculates the angle the point makes with an origin
     The angle is in radians counter clock wise from the positive x-axis
@@ -105,9 +105,15 @@ def get_angle(p, o):
     elif x < 0 and y > 0:  # 2nd
         return numpy.pi - theta
     elif x < 0 and y < 0:  # 3rd
-        return numpy.pi + theta
+        if principal:
+            return -numpy.pi + theta
+        else:
+            return numpy.pi + theta
     else:  # 4th
-        return numpy.pi*2 - theta
+        if principal:
+            return -theta
+        else:
+            return numpy.pi * 2 - theta
 
 
 def get_length(points, closed=False):
@@ -294,7 +300,7 @@ def get_similarity(points1, points2, tolerance=0, rotation=False, scale=False):
 def get_shortest_path(moving_shape, pivot_line, obstacles, destination, pivot_point=None, tolerance=0, refpoint=None):
     pass
 
-# -----------------------Private utility functions-----------------------
+# -----------------------Small utility functions-----------------------
 
 
 def _first_last_point(points, add=True):
@@ -304,3 +310,19 @@ def _first_last_point(points, add=True):
         return tuple(list(points) + [points[0]])
     else:
         return points
+
+
+def principal_angle(angle):
+    while angle > 180:
+        angle -= 360
+    while angle <= -180:
+        angle += 360
+    return angle
+
+
+def to_polar(x, y):
+    return numpy.sqrt(x**2 + y**2), get_angle((x, y))
+
+
+def to_cartesian(magnitude, angle):
+    return magnitude * numpy.cos(angle), magnitude * numpy.sin(angle)

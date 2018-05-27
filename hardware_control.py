@@ -67,10 +67,14 @@ def calibrate():
     lprint("Calibrating...")
     right_motor.stop()
     left_motor.stop()
+    if not running:
+        raise InterruptedError
     lprint("Computing maximum motor-sensor response time")
     values = []
     for motor in [right_motor,left_motor]:
         for i in range(3):
+            if not running:
+                raise InterruptedError
             current_angle_change_event.clear()
             begin = time.perf_counter()
             motor.forward(1)
@@ -83,10 +87,13 @@ def calibrate():
 
     def min_speed_factor(motor, upper_bound, lower_bound):
         for i in range(5):
+            if not running:
+                raise InterruptedError
             mid_point = (upper_bound+lower_bound)/2
             motor.forward(mid_point)
+            time.sleep(response_time*5)
             current_angle_change_event.clear()
-            if current_angle_change_event.wait(response_time):
+            if current_angle_change_event.wait(response_time*5):
                 upper_bound = mid_point
             else:
                 lower_bound = mid_point
@@ -100,8 +107,8 @@ def calibrate():
     lprint('= {}'.format(speed_factors['left_min']))
 
     lprint("Computing speed differences between motors")
-    for o in 0, 1:
-        for i in numpy.arange(1, max(speed_factors['right_min'],speed_factors['left_min']), -0.1):
+    for i in numpy.arange(1, max(speed_factors['right_min'], speed_factors['left_min']), -0.1):
+        for o in 0, 1:
             if o == 0:
                 right_motor.forward(i)
                 left_motor.forward(i)
@@ -109,6 +116,8 @@ def calibrate():
                 right_motor.backward(i)
                 left_motor.backward(i)
             while True:
+                if not running:
+                    raise InterruptedError
                 current_angle_change_event.clear()
                 angle = current_angle
                 if current_angle_change_event.wait(response_time * 2):
@@ -288,12 +297,12 @@ def current_point_updater():
 
 
 speed_control_thread = threading.Thread(name='speed_control', target=speed_control)
+calibrate_thread = threading.Thread(name='calibrate', target=calibrate)
 speed_control_lock = threading.RLock()
 current_angle_updater_thread = threading.Thread(name='current_angle_updater', target=current_angle_updater)
 current_angle_change_event = threading.Event()
 current_point_updater_thread = threading.Thread(name='current_point_updater', target=current_point_updater)
 current_point_change_event = threading.Event()
-
 
 def turn_on(calibrate_first=False, debugging=False):
     global running, debug
@@ -302,7 +311,7 @@ def turn_on(calibrate_first=False, debugging=False):
     running = True
     current_angle_updater_thread.start()
     if calibrate_first:
-        calibrate()
+        calibrate_thread.start()
     #current_point_updater_thread.start()
     speed_control_thread.start()
 
@@ -311,9 +320,9 @@ def turn_off():
     global running
     lprint("Turning off hardware control")
     running = False
-    speed_control_thread.join()
-    current_angle_updater_thread.join()
-    #current_point_updater_thread.join()
+    for thread in [calibrate_thread, speed_control_thread, current_angle_updater_thread, current_point_updater_thread]:
+        if thread.is_alive():
+            thread.join()
     time.sleep(2)
     right_motor.stop()
     left_motor.stop()

@@ -320,6 +320,10 @@ def principal_angle(angle):
     return angle
 
 
+def signed_angle_dif(target,source):
+    return (target-source+180) % 360 -180
+
+
 def to_polar(x, y):
     return numpy.sqrt(x**2 + y**2), get_angle((x, y))
 

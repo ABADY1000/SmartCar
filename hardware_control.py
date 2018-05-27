@@ -4,6 +4,7 @@ import threading
 from geometry_2d import *
 import time
 import smbus
+import math
 
 # Constants
 angle_threshold = 5
@@ -11,17 +12,17 @@ location_threshold = 5
 speed_step = 0.02
 
 # Motors
-speed_factors = {'left_max': 1, 'left_min': 0.3, 'right_max': 1, 'right_min': 0.3}
+speed_factors = {'left_max': 0.6, 'left_min': 0.3, 'right_max': 0.6, 'right_min': 0.3}
 speed_factor_pairs = []
-response_time = 0.5
+response_time = 0.1
 left_motor = od.Motor(14, 15, pwm=True)
 right_motor = od.Motor(20, 21, pwm=True)
 
 # Sensors
-ldr = id.DigitalInputDevice(0)
+#ldr = id.DigitalInputDevice(0)
 length_moved_per_pulse = 0.01  # 1cm
-proximity_sensors = {'Front': id.DigitalInputDevice(0), 'Right': id.DigitalInputDevice(0),
-                     'Left': id.DigitalInputDevice(0)}
+proximity_sensors = {'Front': 1, 'Right': 2,
+                     'Left': 3}
 # Variables
 debug = False
 running = False
@@ -47,6 +48,9 @@ def move_to_point(x, y):
     global wanted_point
     wanted_point = x, y
 
+def rotate_to_angle(angle):
+    wanted_point = current_point
+    wanted_angle = angle
 
 def stop():
     global wanted_point, wanted_angle
@@ -110,17 +114,17 @@ def calibrate():
                 if current_angle_change_event.wait(response_time * 2):
                     if angle > current_angle:  # Rotating clockwise
                         if o == 0:
-                            left_motor.forward(left_motor.value() - speed_step)
+                            left_motor.forward(left_motor.value - speed_step)
                         else:
-                            right_motor.backward(left_motor.value() - speed_step)
+                            right_motor.backward(left_motor.value - speed_step)
 
                     else:  # Rotating counter clockwise
                         if o == 0:
-                            right_motor.forward(left_motor.value() - speed_step)
+                            right_motor.forward(left_motor.value - speed_step)
                         else:
-                            left_motor.backward(left_motor.value() - speed_step)
+                            left_motor.backward(left_motor.value - speed_step)
                 else:
-                    speed_factor_pairs += [(left_motor.value(), right_motor.value())]
+                    speed_factor_pairs += [(left_motor.value, right_motor.value)]
                     break
     lprint("= {}".format(speed_factor_pairs))
     a = tuple(zip(*speed_factor_pairs))
@@ -131,15 +135,15 @@ def calibrate():
     speed_control_lock.release()
 
 
-def get_proximity_readings():
-    readings = {}
-    if proximity_sensors['Front'].is_active():
-        readings['Front'] = 0.1
-    if proximity_sensors['Right'].is_active():
-        readings['Right'] = 0.02
-    if proximity_sensors['Left'].is_active():
-        readings['Left'] = 0.02
-    return readings
+#def get_proximity_readings():
+ #   readings = {}
+  #  if proximity_sensors['Front'].is_active():
+   #     readings['Front'] = 0.1
+    #if proximity_sensors['Right'].is_active():
+    #    readings['Right'] = 0.02
+    #if proximity_sensors['Left'].is_active():
+    #    readings['Left'] = 0.02
+    #return readings
 
 
 def speed_control():
@@ -148,10 +152,10 @@ def speed_control():
         time.sleep(response_time)
         speed_control_lock.acquire()
         wanted_angle = get_angle(wanted_point, current_point, principal=False)
-        angle_dif = abs(principal_angle(wanted_angle) - principal_angle(current_angle))
+        angle_dif = signed_angle_dif(wanted_angle, current_angle)
         match_point = get_length((wanted_point, current_point)) >= location_threshold
         # If the difference was high Or if we arrived at wanted_point then stop and correct the angle
-        if angle_dif > angle_threshold * 4 or (not match_point and angle_dif > angle_threshold):
+        if abs(angle_dif) > angle_threshold * 4 or (not match_point and abs(angle_dif) > angle_threshold):
             lprint('Big angle difference stopping and correcting')
             if angle_dif > 90:
                 rs = speed_factors['right_max']
@@ -162,17 +166,17 @@ def speed_control():
             else:
                 rs = speed_factors['right_min']
                 ls = speed_factors['left_min']
-            if current_angle > wanted_angle:
+            if angle_dif < 0:
                 left_motor.forward(ls)
                 right_motor.backward(rs)
             else:
                 left_motor.backward(ls)
                 right_motor.forward(rs)
         # If there is a small angle difference but we still need to get to a point then correct it as the car is moving
-        elif angle_dif > angle_threshold and match_point:
-            lprint('Small angle difference while moving to point. Correcting ls={} rs{}'.format(left_motor.value(),right_motor.value()))
-            if current_angle > wanted_angle:
-                if right_motor.value() <= 0 or left_motor.value <= 0:
+        elif abs(angle_dif) > angle_threshold and match_point:
+            lprint('Small angle difference while moving to point. Correcting ls={} rs{}'.format(left_motor.value,right_motor.value))
+            if angle_dif < 0:
+                if right_motor.value <= 0 or left_motor.value <= 0:
                     right_motor.forward(speed_factors['right_max'])
                     left_motor.forward(speed_factors['left_max'] - speed_step)
                 else:
@@ -243,14 +247,14 @@ def current_angle_updater():
     bus = smbus.SMBus(1)  # or bus = smbus.SMBus(0) for older version boards
     Device_Address = 0x1e  # HMC5883L magnetometer device address
     Magnetometer_Init()  # initialize HMC5883L magnetometer
-    while running:
+    while True:
         time.sleep(0.1)
         # Read Accelerometer raw value
         x = read_raw_data(X_axis_H)
         z = read_raw_data(Z_axis_H)
         y = read_raw_data(Y_axis_H)
 
-        heading = numpy.atan2(y, x) + declination
+        heading = math.atan2(y, x) + declination
 
         # Due to declination check for >360 degree
         if (heading > 2 * numpy.pi):
@@ -294,17 +298,23 @@ current_point_change_event = threading.Event()
 def turn_on(calibrate_first=False, debugging=False):
     global running, debug
     debug = debugging
+    lprint("Turning on hardware control")
     running = True
     current_angle_updater_thread.start()
     if calibrate_first:
         calibrate()
-    current_point_updater_thread.start()
+    #current_point_updater_thread.start()
     speed_control_thread.start()
 
 
 def turn_off():
     global running
+    lprint("Turning off hardware control")
     running = False
+    speed_control_thread.join()
+    current_angle_updater_thread.join()
+    #current_point_updater_thread.join()
+    time.sleep(2)
     right_motor.stop()
     left_motor.stop()
 
